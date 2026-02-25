@@ -10,6 +10,75 @@
 #include <fstream>
 #include <iomanip>
 
+char selected_algorithm;
+int nmax_for_forcee;
+uniorb::gravity_stokes GravityStokes;
+
+void FORCEE(double *Xc, double *Vc, double Tc, double *Fc)
+{
+    double x_itrf = 0.0;
+    double y_itrf = 0.0;
+    double z_itrf = 0.0;
+    double vx_itrf = 0.0;
+    double vy_itrf = 0.0;
+    double vz_itrf = 0.0;
+
+    std::array<double, 3> Result;
+    std::array<double, 3> spherical = {0,0,0};
+    // astrometry ICRF -> ITRF
+    for (int j = 0; j < 3; j++)
+    {
+        x_itrf += rc2t[0][j] * Xc[j + 1];
+        //vx_itrf += rc2t[0][j] * Xc[j + 4] + rc2t1[0][j] * Xc[j + 1];
+    }
+    for (int j = 0; j < 3; j++)
+    {
+        y_itrf += rc2t[1][j] * Xc[j + 1];
+        //vy_itrf += rc2t[1][j] * Xc[j + 4] + rc2t1[1][j] * Xc[j + 1];
+    }
+    for (int j = 0; j < 3; j++)
+    {
+        z_itrf += rc2t[2][j] * Xc[j + 1];
+        //vz_itrf += rc2t[2][j] * Xc[j + 4] + rc2t1[2][j] * Xc[j + 1];
+    }
+
+    spherical = XYZtoRLatLon(x_itrf, y_itrf, z_itrf);
+
+    if (selected_algorithm == 'B')
+    {
+        gravityBelikov(spherical[0], spherical[1], spherical[2], nmax_for_forcee, Result);
+    }
+    else if (selected_algorithm == 'C')
+    {
+        gravityCunningham(spherical[0], spherical[1], spherical[2], nmax_for_forcee, Result);
+    }
+    else if (selected_algorithm == 'H')
+    {
+        GravityStokes.get_acceleration(spherical[0], spherical[1], spherical[2], Result);
+    }
+    else if (selected_algorithm == 'M')
+    {
+        GravityStokes.get_acceleration(spherical[0], spherical[1], spherical[2], Result);
+    }
+
+    Fc[1] = Xc[4]; Fc[2] = Xc[5]; Fc[3] = Xc[6]; // dx/dt = v
+    Fc[4] = 0.0; Fc[5] = 0.0; Fc[6] = 0.0; // dv/dt = g
+    // astrometry ITRF -> ICRF
+    for (int j = 0; j < 3; j++)
+    {
+        Fc[4] += rt2c[0][j] * Result[j];
+    }
+    for (int j = 0; j < 3; j++)
+    {
+        Fc[5] += rt2c[1][j] * Result[j];
+    }
+    for (int j = 0; j < 3; j++)
+    {
+        Fc[6] += rt2c[2][j] * Result[j];
+    }
+    //Fc[4] = Result[0]; Fc[5] = Result[1]; Fc[6] = Result[2];
+}
+
 // Function to display the comparison mode submenu
 void displayComparisonMenu(const std::string& gravityModelName, int nmax, double radius, 
                           double latitude, double longitude, int importedharmonics, 
@@ -26,8 +95,9 @@ void displayComparisonMenu(const std::string& gravityModelName, int nmax, double
     std::cout << "\nCOMPARISON MODE MENU:\n"
               << "1. Random Data Comparison\n"
               << "2. Sequential Data Comparison\n"
-              << "3. Change Number of Runs\n"
-              << "4. Back to Main Menu\n"
+              << "3. Sequential Data Comparison with Everhart\n"
+              << "4. Change Number of Runs\n"
+              << "5. Back to Main Menu\n"
               << "Enter choice: ";
 }
 
@@ -161,7 +231,6 @@ void runRandomDataComparison(int nmax, int num_runs, int threads, int& importedh
     std::cout << "Results saved to results_RANDOM.csv\n";
 }
 
-// Function to handle sequential data comparison with file output
 void runSequentialDataComparison(double radius, double latitude, double longitude, int nmax, 
                                 int num_runs, int threads, int& importedharmonics) {
     std::cout << "Sequential Data Mode to file (formatted output) selected.\n";
@@ -184,9 +253,13 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
     }
 
     file << "Algorithm,Run,Time (ms),R,Latitude,Longitude,ax,ay,az\n";
+    file << std::setprecision(17);
 
     std::array<double, 3> xyz = RLatLonToXYZ(radius, latitude, longitude);
-    std::array<double, 3> v = random_velocity(radius);
+    // std::array<double, 3> v = random_velocity(radius);
+    std::array<double, 3> v = orbit_velocity(radius, latitude, longitude);
+
+    std::cout << v[0] << '\t' << v[1] << '\t' << v[2] << std::endl;
 
     std::array<double, 3> sphericalB = {0,0,0};
     std::array<double, 3> sphericalC = {0,0,0};
@@ -208,7 +281,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
     double latitudeB = latitude, latitudeC = latitude, latitudeH1 = latitude, latitudeHm = latitude;
     double longitudeB = longitude, longitudeC = longitude, longitudeH1 = longitude, longitudeHm = longitude;
 
-    double deltat = 0.001;
+    double deltat = 1.0;
 
     std::cout << "Algorithm is running...\n";
 
@@ -217,7 +290,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
         std::array<double, 3> ResultBelikov{};
         auto startB = std::chrono::high_resolution_clock::now();
         gravityBelikov(radiusB, latitudeB, longitudeB, nmax, ResultBelikov);
-        simulate_integrator_and_sofa(27);
+        //simulate_integrator_and_sofa(27);
         auto endB = std::chrono::high_resolution_clock::now();
         double timeB = std::chrono::duration<double, std::milli>(endB - startB).count();
         fulltimeB += timeB;
@@ -227,12 +300,13 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
              << ResultBelikov[0] << "," << ResultBelikov[1] << "," << ResultBelikov[2] << "\n";
 
         // Integration
-        xB += vxB * deltat + 0.5 * ResultBelikov[0] * deltat * deltat;
-        yB += vyB * deltat + 0.5 * ResultBelikov[1] * deltat * deltat;
-        zB += vzB * deltat + 0.5 * ResultBelikov[2] * deltat * deltat;
         vxB += ResultBelikov[0] * deltat;
         vyB += ResultBelikov[1] * deltat;
         vzB += ResultBelikov[2] * deltat;
+        xB += vxB * deltat;// + 0.5 * ResultBelikov[0] * deltat * deltat;
+        yB += vyB * deltat;// + 0.5 * ResultBelikov[1] * deltat * deltat;
+        zB += vzB * deltat;// + 0.5 * ResultBelikov[2] * deltat * deltat;
+
         sphericalB = XYZtoRLatLon(xB, yB, zB);
         radiusB = sphericalB[0];
         latitudeB = sphericalB[1];
@@ -242,7 +316,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
         std::array<double, 3> ResultCunningham{};
         auto startC = std::chrono::high_resolution_clock::now();
         gravityCunningham(radiusC, latitudeC, longitudeC, nmax, ResultCunningham);
-        simulate_integrator_and_sofa(27);
+        //simulate_integrator_and_sofa(27);
         auto endC = std::chrono::high_resolution_clock::now();
         double timeC = std::chrono::duration<double, std::milli>(endC - startC).count();
         fulltimeC += timeC;
@@ -251,12 +325,12 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
              << radiusC << "," << latitudeC << "," << longitudeC << ","
              << ResultCunningham[0] << "," << ResultCunningham[1] << "," << ResultCunningham[2] << "\n";
 
-        xC += vxC * deltat + 0.5 * ResultCunningham[0] * deltat * deltat;
-        yC += vyC * deltat + 0.5 * ResultCunningham[1] * deltat * deltat;
-        zC += vzC * deltat + 0.5 * ResultCunningham[2] * deltat * deltat;
         vxC += ResultCunningham[0] * deltat;
         vyC += ResultCunningham[1] * deltat;
         vzC += ResultCunningham[2] * deltat;
+        xC += vxC * deltat; // + 0.5 * ResultCunningham[0] * deltat * deltat;
+        yC += vyC * deltat; // + 0.5 * ResultCunningham[1] * deltat * deltat;
+        zC += vzC * deltat; // + 0.5 * ResultCunningham[2] * deltat * deltat;
         sphericalC = XYZtoRLatLon(xC, yC, zC);
         radiusC = sphericalC[0];
         latitudeC = sphericalC[1];
@@ -270,7 +344,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
 
         auto startS = std::chrono::high_resolution_clock::now();
         GravityStokes.get_acceleration(radiusH1, latitudeH1, longitudeH1, ResultStokesONE);
-        simulate_integrator_and_sofa(27);
+        //simulate_integrator_and_sofa(27);
         auto endS = std::chrono::high_resolution_clock::now();
         double timeS = std::chrono::duration<double, std::milli>(endS - startS).count();
         fulltimeH1 += timeS;
@@ -279,12 +353,12 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
              << radiusH1 << "," << latitudeH1 << "," << longitudeH1 << ","
              << ResultStokesONE[0] << "," << ResultStokesONE[1] << "," << ResultStokesONE[2] << "\n";
 
-        xH1 += vxH1 * deltat + 0.5 * ResultStokesONE[0] * deltat * deltat;
-        yH1 += vyH1 * deltat + 0.5 * ResultStokesONE[1] * deltat * deltat;
-        zH1 += vzH1 * deltat + 0.5 * ResultStokesONE[2] * deltat * deltat;
         vxH1 += ResultStokesONE[0] * deltat;
         vyH1 += ResultStokesONE[1] * deltat;
         vzH1 += ResultStokesONE[2] * deltat;
+        xH1 += vxH1 * deltat;
+        yH1 += vyH1 * deltat;
+        zH1 += vzH1 * deltat;
         sphericalH1 = XYZtoRLatLon(xH1, yH1, zH1);
         radiusH1 = sphericalH1[0];
         latitudeH1 = sphericalH1[1];
@@ -296,7 +370,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
 
         auto startSM = std::chrono::high_resolution_clock::now();
         GravityStokes.get_acceleration(radiusHm, latitudeHm, longitudeHm, ResultStokesMULTI);
-        simulate_integrator_and_sofa(27);
+        //simulate_integrator_and_sofa(27);
         auto endSM = std::chrono::high_resolution_clock::now();
         double timeSM = std::chrono::duration<double, std::milli>(endSM - startSM).count();
         fulltimeHm += timeSM;
@@ -305,12 +379,12 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
              << radiusHm << "," << latitudeHm << "," << longitudeHm << ","
              << ResultStokesMULTI[0] << "," << ResultStokesMULTI[1] << "," << ResultStokesMULTI[2] << "\n";
 
-        xHm += vxHm * deltat + 0.5 * ResultStokesMULTI[0] * deltat * deltat;
-        yHm += vyHm * deltat + 0.5 * ResultStokesMULTI[1] * deltat * deltat;
-        zHm += vzHm * deltat + 0.5 * ResultStokesMULTI[2] * deltat * deltat;
         vxHm += ResultStokesMULTI[0] * deltat;
         vyHm += ResultStokesMULTI[1] * deltat;
         vzHm += ResultStokesMULTI[2] * deltat;
+        xHm += vxHm * deltat;
+        yHm += vyHm * deltat;
+        zHm += vzHm * deltat;
         sphericalHm = XYZtoRLatLon(xHm, yHm, zHm);
         radiusHm = sphericalHm[0];
         latitudeHm = sphericalHm[1];
@@ -342,6 +416,247 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
 
     file.close();
     std::cout << "Results saved to results_SEQUENTIAL.csv\n";
+}
+
+// Function to handle sequential data comparison with file output
+void runSequentialDataComparisonWithEverhart(double radius, double latitude, double longitude, int nmax, 
+                                int num_runs, int threads, int& importedharmonics) {
+    std::cout << "Sequential Data Mode to file (formatted output) selected.\n";
+
+    if (nmax == 0) {
+        std::cout << "WARNING: NMAX = 0 (Keplerian mode). Comparison mode requires harmonics to be set.\n";
+        std::cout << "Please set NMAX > 0 to run comparison mode.\n";
+        return;
+    }
+
+    if (importflag == 0) {
+        importStokesCombined(gravityModels[selectedModel], nmax);
+        importedharmonics = nmax;
+    }
+
+    std::ofstream file(std::to_string(nmax) + "harm_1secondstep_" + std::to_string(num_runs) + "steps_" + "everhart_results_SEQUENTIAL.csv");
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open file for writing.\n";
+        return;
+    }
+
+    file << "Algorithm,Run,Time (ms),R,Latitude,Longitude,ax,ay,az\n";
+    file << std::setprecision(17);
+
+    std::array<double, 3> xyz = RLatLonToXYZ(radius, latitude, longitude);
+    // std::array<double, 3> v = random_velocity(radius);
+    std::array<double, 3> v = orbit_velocity(radius, latitude, longitude);
+
+    std::cout << v[0] << '\t' << v[1] << '\t' << v[2] << std::endl;
+
+    std::array<double, 3> sphericalB = {0,0,0};
+    std::array<double, 3> sphericalC = {0,0,0};
+    std::array<double, 3> sphericalH1 = {0,0,0};
+    std::array<double, 3> sphericalHm = {0,0,0};
+
+    double fulltimeB = 0, fulltimeC = 0, fulltimeH1 = 0, fulltimeHm = 0;
+    double s = 0, e = 0;
+
+    double xB = xyz[0], xC = xyz[0], xH1 = xyz[0], xHm = xyz[0];
+    double yB = xyz[1], yC = xyz[1], yH1 = xyz[1], yHm = xyz[1];
+    double zB = xyz[2], zC = xyz[2], zH1 = xyz[2], zHm = xyz[2];
+
+    double vxB = v[0], vxC = v[0], vxH1 = v[0], vxHm = v[0];
+    double vyB = v[1], vyC = v[1], vyH1 = v[1], vyHm = v[1];
+    double vzB = v[2], vzC = v[2], vzH1 = v[2], vzHm = v[2];
+
+    double radiusB = radius, radiusC = radius, radiusH1 = radius, radiusHm = radius;
+    double latitudeB = latitude, latitudeC = latitude, latitudeH1 = latitude, latitudeHm = latitude;
+    double longitudeB = longitude, longitudeC = longitude, longitudeH1 = longitude, longitudeHm = longitude;
+
+    double deltat = 1.0;
+
+    std::cout << "Algorithm is running...\n";
+    double x[7];
+    double v_everhart[7];
+    int nfB = 0, nsB = 0, nfC = 0, nsC = 0, nfH1 = 0, nsH1 = 0, nfHm = 0, nsHm = 0;
+    int *nnfB = &nfB, *nnsB = &nsB, *nnfC = &nfC, *nnsC = &nsC, *nnfH1 = &nfH1, *nnsH1 = &nsH1, *nnfHm = &nfHm, *nnsHm = &nsHm;
+    double time_in_seconds = 0;
+
+    // INITIAL ASTROMETRY SHINANIGANS
+    EOP();
+
+
+    nmax_for_forcee = nmax;
+    for (int run = 1; run <= num_runs; ++run) {
+        
+        // ASTROMETRY TIME!
+        rotationMatrices(time_in_seconds);
+
+
+        // === Belikov === //
+        std::array<double, 3> ResultBelikov{};
+        auto startB = std::chrono::high_resolution_clock::now();
+        gravityBelikov(radiusB, latitudeB, longitudeB, nmax, ResultBelikov);
+        auto endB = std::chrono::high_resolution_clock::now();
+        double timeB = std::chrono::duration<double, std::milli>(endB - startB).count();
+        fulltimeB += timeB;
+
+        file << "Belikov," << run << "," << timeB << ","
+             << radiusB << "," << latitudeB << "," << longitudeB << ","
+             << ResultBelikov[0] << "," << ResultBelikov[1] << "," << ResultBelikov[2] << "\n";
+
+        // PROPAGATION WITH EVERHART
+        x[0] = 0.0; v_everhart[0] = 0.0;
+        
+        xyz = RLatLonToXYZ(radiusB, latitudeB, longitudeB);
+
+        x[1] = xyz[0]; x[4] = vxB;
+        x[2] = xyz[1]; x[5] = vyB;
+        x[3] = xyz[2]; x[6] = vzB;
+
+        selected_algorithm = 'B';
+        rada27e(x, v_everhart, time_in_seconds, time_in_seconds + deltat, 0.2, -4, 6, 1, &nfB, &nsB, 1, 7, 0);
+        xB = x[1]; yB = x[2]; zB = x[3];
+        vxB = x[4]; vyB = x[5]; vzB = x[6];
+
+        sphericalB = XYZtoRLatLon(xB, yB, zB);
+        radiusB = sphericalB[0];
+        latitudeB = sphericalB[1];
+        longitudeB = sphericalB[2];
+
+        // === Cunningham === //
+        std::array<double, 3> ResultCunningham{};
+        auto startC = std::chrono::high_resolution_clock::now();
+        gravityCunningham(radiusC, latitudeC, longitudeC, nmax, ResultCunningham);
+        //simulate_integrator_and_sofa(27);
+        auto endC = std::chrono::high_resolution_clock::now();
+        double timeC = std::chrono::duration<double, std::milli>(endC - startC).count();
+        fulltimeC += timeC;
+
+        file << "Cunningham," << run << "," << timeC << ","
+             << radiusC << "," << latitudeC << "," << longitudeC << ","
+             << ResultCunningham[0] << "," << ResultCunningham[1] << "," << ResultCunningham[2] << "\n";
+
+        // PROPAGATION WITH EVERHART
+        x[0] = 0.0; v_everhart[0] = 0.0;
+
+        xyz = RLatLonToXYZ(radiusC, latitudeC, longitudeC);
+
+        x[1] = xyz[0]; x[4] = vxC;
+        x[2] = xyz[1]; x[5] = vyC;
+        x[3] = xyz[2]; x[6] = vzC;
+        selected_algorithm = 'C';
+        rada27e(x, v_everhart, time_in_seconds, time_in_seconds + deltat, 0.2, -4, 6, 1, &nfC, &nsC, 1, 7, 0);
+
+        xC = x[1]; yC = x[2]; zC = x[3];
+        vxC = x[4]; vyC = x[5]; vzC = x[6];
+
+        sphericalC = XYZtoRLatLon(xC, yC, zC);
+        radiusC = sphericalC[0];
+        latitudeC = sphericalC[1];
+        longitudeC = sphericalC[2];
+
+        // === Stokes (1-thread) === //
+        using namespace uniorb;
+        std::array<double, 3> ResultStokesONE{};
+        GravityStokes = gravity_stokes(_c, _s, nmax, nmax, EARTH_MU, EARTH_RADIUS);
+        GravityStokes.use_concurrency(1);
+
+        auto startS = std::chrono::high_resolution_clock::now();
+        GravityStokes.get_acceleration(radiusH1, latitudeH1, longitudeH1, ResultStokesONE);
+        //simulate_integrator_and_sofa(27);
+        auto endS = std::chrono::high_resolution_clock::now();
+        double timeS = std::chrono::duration<double, std::milli>(endS - startS).count();
+        fulltimeH1 += timeS;
+
+        file << "Stokes_1thread," << run << "," << timeS << ","
+             << radiusH1 << "," << latitudeH1 << "," << longitudeH1 << ","
+             << ResultStokesONE[0] << "," << ResultStokesONE[1] << "," << ResultStokesONE[2] << "\n";
+
+        // PROPAGATION WITH EVERHART
+        x[0] = 0.0; v_everhart[0] = 0.0;
+        
+        xyz = RLatLonToXYZ(radiusH1, latitudeH1, longitudeH1);
+
+        x[1] = xyz[0]; x[4] = vxH1;
+        x[2] = xyz[1]; x[5] = vyH1;
+        x[3] = xyz[2]; x[6] = vzH1;
+
+        selected_algorithm = 'H';
+        rada27e(x, v_everhart, time_in_seconds, time_in_seconds + deltat, 0.2, -4, 6, 1, &nfH1, &nsH1, 1, 7, 0);
+
+        xH1 = x[1]; yH1 = x[2]; zH1 = x[3];
+        vxH1 = x[4]; vyH1 = x[5]; vzH1 = x[6];
+
+
+        sphericalH1 = XYZtoRLatLon(xH1, yH1, zH1);
+        radiusH1 = sphericalH1[0];
+        latitudeH1 = sphericalH1[1];
+        longitudeH1 = sphericalH1[2];
+
+        // === Stokes (multi-thread) === //
+        std::array<double, 3> ResultStokesMULTI{};
+        GravityStokes.use_concurrency(threads);
+
+        auto startSM = std::chrono::high_resolution_clock::now();
+        GravityStokes.get_acceleration(radiusHm, latitudeHm, longitudeHm, ResultStokesMULTI);
+        //simulate_integrator_and_sofa(27);
+        auto endSM = std::chrono::high_resolution_clock::now();
+        double timeSM = std::chrono::duration<double, std::milli>(endSM - startSM).count();
+        fulltimeHm += timeSM;
+
+        file << "Stokes_multithread," << run << "," << timeSM << ","
+             << radiusHm << "," << latitudeHm << "," << longitudeHm << ","
+             << ResultStokesMULTI[0] << "," << ResultStokesMULTI[1] << "," << ResultStokesMULTI[2] << "\n";
+
+        // PROPAGATION WITH EVERHART
+        x[0] = 0.0; v_everhart[0] = 0.0;
+        
+        xyz = RLatLonToXYZ(radiusHm, latitudeHm, longitudeHm);
+
+        x[1] = xyz[0]; x[4] = vxHm;
+        x[2] = xyz[1]; x[5] = vyHm;
+        x[3] = xyz[2]; x[6] = vzHm;
+
+        selected_algorithm = 'M';
+        rada27e(x, v_everhart, time_in_seconds, time_in_seconds + deltat, 0.2, -4, 6, 1, &nfHm, &nsHm, 1, 7, 0);
+
+        xHm = x[1]; yHm = x[2]; zHm = x[3];
+        vxHm = x[4]; vyHm = x[5]; vzHm = x[6];
+
+        sphericalHm = XYZtoRLatLon(xHm, yHm, zHm);
+        radiusHm = sphericalHm[0];
+        latitudeHm = sphericalHm[1];
+        longitudeHm = sphericalHm[2];
+
+        time_in_seconds += deltat;
+
+        int progress = static_cast<int>(100.0 * run / num_runs);
+        if (progress % 5 == 0)
+           std::cout << "\rProgress: " << progress << "%" << std::flush;
+    }
+    std::cout << "\rProgress: 100%\nComputation complete.\n";
+    
+    std::cout << "Belikov algorithm completed with " << nfB << " computations" << std::endl;
+    std::cout << "Cunningham algorithm completed with " << nfC << " computations" << std::endl;
+    std::cout << "Holmes1 algorithm completed with " << nfH1 << " computations" << std::endl;
+    std::cout << "HolmesM algorithm completed with " << nfHm << " computations" << std::endl;
+
+    s = fulltimeH1 / fulltimeHm;
+    e = s / threads;
+
+    file << "\nTotal time (ms):\n";
+    file << "Belikov," << fulltimeB << "\n";
+    file << "Cunningham," << fulltimeC << "\n";
+    file << "Stokes_1thread," << fulltimeH1 << "\n";
+    file << "Stokes_multithread," << fulltimeHm << "\n";
+    file << "Speedup," << s << "\n";
+    file << "Efficiency," << e << "\n";
+
+    file << "\nFinal coordinates (R, LAT, LON):\n";
+    file << "Belikov," << radiusB << "," << latitudeB << "," << longitudeB << "\n";
+    file << "Cunningham," << radiusC << "," << latitudeC << "," << longitudeC << "\n";
+    file << "Stokes_1thread," << radiusH1 << "," << latitudeH1 << "," << longitudeH1 << "\n";
+    file << "Stokes_multithread," << radiusHm << "," << latitudeHm << "," << longitudeHm << "\n";
+
+    file.close();
+    std::cout << "Results saved to " + std::to_string(nmax) + "harm_1secondstep_" + std::to_string(num_runs) + "steps_" + "everhart_results_SEQUENTIAL.csv" + "\n";
 }
 
 // Function to handle changing number of runs
@@ -389,9 +704,12 @@ void runComparisonMode(double& radius, double& latitude, double& longitude, int 
                 runSequentialDataComparison(radius, latitude, longitude, nmax, num_runs, threads, importedharmonics);
                 break;
             case 3:
-                changeNumberOfRuns(num_runs);
+                runSequentialDataComparisonWithEverhart(radius, latitude, longitude, nmax, num_runs, threads, importedharmonics);
                 break;
             case 4:
+                changeNumberOfRuns(num_runs);
+                break;
+            case 5:
                 submenu_active = false;
                 break;
             default:
