@@ -1,6 +1,8 @@
 #include "Albert.h"
 #include "Belikov.h"
 #include "Cunningham.h"
+#include "astrometry.h"
+#include "everhart.h"
 #include "Simulate.h"
 #include "SingleAlgorithmExecution.h"
 #include "AlgorithmComparison.h"
@@ -101,6 +103,7 @@ int main() {
 
         return 0;
     }
+
 
 
 
