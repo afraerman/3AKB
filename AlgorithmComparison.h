@@ -488,7 +488,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         // ASTROMETRY TIME!
         rotationMatrices(time_in_seconds);
 
-
+        /*
         // === Belikov === //
         std::array<double, 3> ResultBelikov{};
         auto startB = std::chrono::high_resolution_clock::now();
@@ -551,7 +551,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         radiusC = sphericalC[0];
         latitudeC = sphericalC[1];
         longitudeC = sphericalC[2];
-
+        */
         // === Stokes (1-thread) === //
         using namespace uniorb;
         std::array<double, 3> ResultStokesONE{};
@@ -589,7 +589,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         radiusH1 = sphericalH1[0];
         latitudeH1 = sphericalH1[1];
         longitudeH1 = sphericalH1[2];
-
+        /*
         // === Stokes (multi-thread) === //
         std::array<double, 3> ResultStokesMULTI{};
         GravityStokes.use_concurrency(threads);
@@ -624,7 +624,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         radiusHm = sphericalHm[0];
         latitudeHm = sphericalHm[1];
         longitudeHm = sphericalHm[2];
-
+        */
         time_in_seconds += deltat;
 
         int progress = static_cast<int>(100.0 * run / num_runs);

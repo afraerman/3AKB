@@ -1,6 +1,8 @@
 #include "Albert.h"
 #include "Belikov.h"
 #include "Cunningham.h"
+#include "sofa.h"
+#include "sofam.h"
 #include "astrometry.h"
 #include "everhart.h"
 #include "Simulate.h"
