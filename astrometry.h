@@ -23,7 +23,7 @@ void EOP()
 	int year_r, month_r, day_r, mjd_r, dat;
 	double x_r, y_r, dut_r;
 	double lod, dpsi, deps, dx, dy, djm0, djm;
-	std::string eopfilename = "./files/eop_new.txt";
+	std::string eopfilename = "eop_new.txt";
 	std::ifstream eop(eopfilename);
 	if (!eop.is_open())
 	{
