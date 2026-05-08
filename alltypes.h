@@ -18,11 +18,12 @@
 	
 	void gravityBelikov(double r, double lat, double lon, int n, std::array<double, 3>& Result);
 	void gravityCunningham(double r, double lat, double lon, int n, std::array<double, 3>& Result);
+    void gravityFukushima(double r, double lat, double lon, int n, std::array<double, 3>& Result);
 
 
 std::map<int, std::string> gravityModels = {
-	{1, "EGM96.dat"},
-	{2, "EGM08.dat"}
+	{1, "../EGM96.dat"},
+	{2, "../EGM08.dat"}
 };
 
 int selectedModel = 1; 

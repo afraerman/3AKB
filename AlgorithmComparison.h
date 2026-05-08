@@ -128,11 +128,13 @@ void runRandomDataComparison(int nmax, int num_runs, int threads, int& importedh
 
     double total_time_belikov = 0.0;
     double total_time_cunningham = 0.0;
+    double total_time_fukushima = 0.0;
     double total_time_stokes_single = 0.0;
     double total_time_stokes_multi = 0.0;
 
     std::array<double, 3> resB = {0.0, 0.0, 0.0};
     std::array<double, 3> resC = {0.0, 0.0, 0.0};
+    std::array<double, 3> resF = {0.0, 0.0, 0.0};
     std::array<double, 3> resS1 = {0.0, 0.0, 0.0};
     std::array<double, 3> resSM = {0.0, 0.0, 0.0};
 
@@ -165,6 +167,17 @@ void runRandomDataComparison(int nmax, int num_runs, int threads, int& importedh
              << radius << "," << latitude << "," << longitude << ","
              << resC[0] << "," << resC[1] << "," << resC[2] << "\n";
         total_time_cunningham += timeC;
+
+        // === Fukushima ===
+        auto startF = std::chrono::high_resolution_clock::now();
+        gravityFukushima(radius, latitude, longitude, nmax, resF);
+        simulate_integrator_and_sofa(27);
+        auto endF = std::chrono::high_resolution_clock::now();
+        double timeF = std::chrono::duration<double, std::milli>(endF - startF).count();
+        file << "Fukushima," << run << "," << timeF << ","
+             << radius << "," << latitude << "," << longitude << ","
+             << resF[0] << "," << resF[1] << "," << resF[2] << "\n";
+        total_time_fukushima += timeF;
 
         // === Stokes (1-thread) ===
         using namespace uniorb;
@@ -207,6 +220,7 @@ void runRandomDataComparison(int nmax, int num_runs, int threads, int& importedh
     file << "\nTotal time (ms):\n";
     file << "Belikov," << total_time_belikov << "\n";
     file << "Cunningham," << total_time_cunningham << "\n";
+    file << "Fukushima," << total_time_fukushima << "\n";
     file << "Stokes_1thread," << total_time_stokes_single << "\n";
     file << "Stokes_multithread," << total_time_stokes_multi << "\n";
 
@@ -222,6 +236,8 @@ void runRandomDataComparison(int nmax, int num_runs, int threads, int& importedh
          << resB[0] << "," << resB[1] << "," << resB[2] << "\n";
     file << "Cunningham,"
          << resC[0] << "," << resC[1] << "," << resC[2] << "\n";
+    file << "Fukushima,"
+         << resF[0] << "," << resF[1] << "," << resF[2] << "\n";
     file << "Holmes_1thread,"
          << resS1[0] << "," << resS1[1] << "," << resS1[2] << "\n";
     file << "Holmes_multithread,"
@@ -263,23 +279,24 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
 
     std::array<double, 3> sphericalB = {0,0,0};
     std::array<double, 3> sphericalC = {0,0,0};
+    std::array<double, 3> sphericalF = {0,0,0};
     std::array<double, 3> sphericalH1 = {0,0,0};
     std::array<double, 3> sphericalHm = {0,0,0};
 
-    double fulltimeB = 0, fulltimeC = 0, fulltimeH1 = 0, fulltimeHm = 0;
+    double fulltimeB = 0, fulltimeC = 0, fulltimeF = 0, fulltimeH1 = 0, fulltimeHm = 0;
     double s = 0, e = 0;
 
-    double xB = xyz[0], xC = xyz[0], xH1 = xyz[0], xHm = xyz[0];
-    double yB = xyz[1], yC = xyz[1], yH1 = xyz[1], yHm = xyz[1];
-    double zB = xyz[2], zC = xyz[2], zH1 = xyz[2], zHm = xyz[2];
+    double xB = xyz[0], xC = xyz[0], xF = xyz[0], xH1 = xyz[0], xHm = xyz[0];
+    double yB = xyz[1], yC = xyz[1], yF = xyz[1], yH1 = xyz[1], yHm = xyz[1];
+    double zB = xyz[2], zC = xyz[2], zF = xyz[2], zH1 = xyz[2], zHm = xyz[2];
 
-    double vxB = v[0], vxC = v[0], vxH1 = v[0], vxHm = v[0];
-    double vyB = v[1], vyC = v[1], vyH1 = v[1], vyHm = v[1];
-    double vzB = v[2], vzC = v[2], vzH1 = v[2], vzHm = v[2];
+    double vxB = v[0], vxC = v[0], vxF = v[0], vxH1 = v[0], vxHm = v[0];
+    double vyB = v[1], vyC = v[1], vyF = v[1], vyH1 = v[1], vyHm = v[1];
+    double vzB = v[2], vzC = v[2], vzF = v[2], vzH1 = v[2], vzHm = v[2];
 
-    double radiusB = radius, radiusC = radius, radiusH1 = radius, radiusHm = radius;
-    double latitudeB = latitude, latitudeC = latitude, latitudeH1 = latitude, latitudeHm = latitude;
-    double longitudeB = longitude, longitudeC = longitude, longitudeH1 = longitude, longitudeHm = longitude;
+    double radiusB = radius, radiusC = radius, radiusF = radius, radiusH1 = radius, radiusHm = radius;
+    double latitudeB = latitude, latitudeC = latitude, latitudeF = latitude, latitudeH1 = latitude, latitudeHm = latitude;
+    double longitudeB = longitude, longitudeC = longitude, longitudeF = longitude, longitudeH1 = longitude, longitudeHm = longitude;
 
     double deltat = 1.0;
 
@@ -335,6 +352,30 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
         radiusC = sphericalC[0];
         latitudeC = sphericalC[1];
         longitudeC = sphericalC[2];
+
+        // === Fukushima ===
+        std::array<double, 3> ResultFukushima{};
+        auto startF = std::chrono::high_resolution_clock::now();
+        gravityFukushima(radiusF, latitudeF, longitudeF, nmax, ResultFukushima);
+        //simulate_integrator_and_sofa(27);
+        auto endF = std::chrono::high_resolution_clock::now();
+        double timeF = std::chrono::duration<double, std::milli>(endF - startF).count();
+        fulltimeF += timeF;
+
+        file << "Fukushima," << run << "," << timeF << ","
+             << radiusF << "," << latitudeF << "," << longitudeF << ","
+             << ResultFukushima[0] << "," << ResultFukushima[1] << "," << ResultFukushima[2] << "\n";
+
+        vxF += ResultFukushima[0] * deltat;
+        vyF += ResultFukushima[1] * deltat;
+        vzF += ResultFukushima[2] * deltat;
+        xF += vxF * deltat; // + 0.5 * ResultCunningham[0] * deltat * deltat;
+        yF += vyF * deltat; // + 0.5 * ResultCunningham[1] * deltat * deltat;
+        zF += vzF * deltat; // + 0.5 * ResultCunningham[2] * deltat * deltat;
+        sphericalF = XYZtoRLatLon(xF, yF, zF);
+        radiusF = sphericalF[0];
+        latitudeF = sphericalF[1];
+        longitudeF = sphericalF[2];
 
         // === Stokes (1-thread) ===
         using namespace uniorb;
@@ -403,6 +444,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
     file << "\nTotal time (ms):\n";
     file << "Belikov," << fulltimeB << "\n";
     file << "Cunningham," << fulltimeC << "\n";
+    file << "Fukushima," << fulltimeF << "\n";
     file << "Stokes_1thread," << fulltimeH1 << "\n";
     file << "Stokes_multithread," << fulltimeHm << "\n";
     file << "Speedup," << s << "\n";
@@ -411,6 +453,7 @@ void runSequentialDataComparison(double radius, double latitude, double longitud
     file << "\nFinal coordinates (R, LAT, LON):\n";
     file << "Belikov," << radiusB << "," << latitudeB << "," << longitudeB << "\n";
     file << "Cunningham," << radiusC << "," << latitudeC << "," << longitudeC << "\n";
+    file << "Fukushima," << radiusF << "," << latitudeF << "," << longitudeF << "\n";
     file << "Stokes_1thread," << radiusH1 << "," << latitudeH1 << "," << longitudeH1 << "\n";
     file << "Stokes_multithread," << radiusHm << "," << latitudeHm << "," << longitudeHm << "\n";
 
@@ -434,7 +477,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         importedharmonics = nmax;
     }
 
-    std::ofstream file(std::to_string(nmax) + "harm_1secondstep_" + std::to_string(num_runs) + "steps_" + "everhart_results_SEQUENTIAL.csv");
+    std::ofstream file(std::to_string(nmax) + "harm_" + std::to_string(latitude) + "lat_1secondstep_" + std::to_string(num_runs) + "steps_" + "everhart_results_SEQUENTIAL.csv");
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file for writing.\n";
         return;
@@ -552,6 +595,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         latitudeC = sphericalC[1];
         longitudeC = sphericalC[2];
         */
+
         // === Stokes (1-thread) === //
         using namespace uniorb;
         std::array<double, 3> ResultStokesONE{};
@@ -589,7 +633,8 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         radiusH1 = sphericalH1[0];
         latitudeH1 = sphericalH1[1];
         longitudeH1 = sphericalH1[2];
-        /*
+
+        
         // === Stokes (multi-thread) === //
         std::array<double, 3> ResultStokesMULTI{};
         GravityStokes.use_concurrency(threads);
@@ -624,7 +669,7 @@ void runSequentialDataComparisonWithEverhart(double radius, double latitude, dou
         radiusHm = sphericalHm[0];
         latitudeHm = sphericalHm[1];
         longitudeHm = sphericalHm[2];
-        */
+        
         time_in_seconds += deltat;
 
         int progress = static_cast<int>(100.0 * run / num_runs);
