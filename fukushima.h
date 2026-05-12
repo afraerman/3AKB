@@ -69,7 +69,7 @@ X add(double f, X x, double g, X y)
 	else if (id == -1)
 	{
 		z.x = g * y.x + f * (x.x * BIGI);
-		z.x = y.ix;
+		z.ix = y.ix;
 	}
 	else if (id > 1)
 	{
