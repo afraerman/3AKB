@@ -153,15 +153,22 @@ Corresponding author: fraerman@asc.rssi.ru
 
 ## Citation 📚
 
-If you use this code in your research, please cite our paper (to be updated upon acceptance):
+If you use this code in your research, please cite our paper "Multi-threaded CPU implementation of the Holmes algorithm for pointwise high-degree gravitational potential and acceleration evaluation":
 
 ```bibtex
-@article{Fraerman2026,
-  title = {Multi-threaded parallel implementation of Holmes' algorithm for high-degree spherical harmonic evaluation of Earth's gravitational field},
-  author = {Fraerman, A. V. and Pavlov, T. S. and Shaykhutdinov, A. R. and Zapevalin, P. R.},
-  journal = {Advances in Space Research},
-  year = {2026},
-  doi = {...}
+@article{FRAERMAN2026,
+title = {Multi-threaded CPU implementation of the Holmes algorithm for pointwise high-degree gravitational potential and acceleration evaluation},
+journal = {Advances in Space Research},
+volume = {78},
+number = {5},
+pages = {5267-5278},
+year = {2026},
+issn = {0273-1177},
+doi = {https://doi.org/10.1016/j.asr.2026.06.089},
+url = {https://www.sciencedirect.com/science/article/pii/S0273117726009154},
+author = {A.V. Fraerman and T.S. Pavlov and A.R. Shaykhutdinov and P.R. Zapevalin},
+keywords = {85–04},
+abstract = {Accurate and efficient evaluation of Earth’s gravitational potential using high-degree spherical harmonic expansions is essential for precise long-term orbit propagation in celestial mechanics. Widely used recursive algorithms, such as those developed by Cunningham, Belikov, and Holmes, become computationally demanding at ultra-high degrees required by modern global gravity models. This paper introduces a multi-threaded parallel implementation of Holmes’ algorithm, designed for evaluations on standard multi-core CPUs. The method was extensively tested on various processor architectures and across a range of maximum harmonic degrees up to 2000. By distributing the outer order-wise summation across independent threads, the approach gives speedups of up to 8.4 times. Numerical tests confirm that the parallel version fully preserves the accuracy and stability of the serial Holmes algorithm. All algorithms discussed, including the parallel implementation, are freely available on GitHub.}
 }
 ```
 
